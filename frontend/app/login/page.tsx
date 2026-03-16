@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/auth-context'
 import { validateEmail } from '@/lib/validation'
 
+
 export default function LoginPage() {
   const router = useRouter()
   const { login } = useAuth()
