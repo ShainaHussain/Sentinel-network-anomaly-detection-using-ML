@@ -63,20 +63,58 @@ export default function UploadPage() {
     setUploadResult(null)
 
     // Simulate processing
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    // await new Promise(resolve => setTimeout(resolve, 2000))
 
+
+    try {
+    const fileText = await file.text();
+    const jsonData = JSON.parse(fileText);
+
+    const res = await fetch("http://localhost:5000/api/predict", {
+      method: "POST", 
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(jsonData),
+    });
+    const data = await res.json()
+
+
+    if (res.ok) {
+      setUploadResult({
+        fileName: file.name,
+        status: "complete",
+        anomaliesFound: data.is_attack ? 1 : 0, // shows 1 if attack detected
+        processingTime: Math.floor(Math.random() * 10) + 1,
+        message: data.prediction || "Prediction complete",
+        
+      });
+      markDetectionComplete();
+      router.push("/results")
+    } else {
+      setUploadResult({
+        fileName: file.name,
+        status: "error",
+        anomaliesFound: 0,
+        processingTime: 0,
+        message: data.error || "Failed to process file",
+      });
+    }
+  } catch (err) {
+    console.error("Upload error:", err);
     setUploadResult({
       fileName: file.name,
-      status: 'complete',
-      anomaliesFound: Math.floor(Math.random() * 500) + 50,
-      processingTime: Math.floor(Math.random() * 30) + 5,
-      message: 'File processed successfully',
-    })
-
-    // Mark detection as complete to unlock other pages
-    markDetectionComplete()
-    setIsProcessing(false)
+      status: "error",
+      anomaliesFound: 0,
+      processingTime: 0,
+      message: "Invalid JSON or server error",
+    });
+  }  finally {
+    setIsProcessing(false);
   }
+  
+};
+  
 
   return (
     <AppLayout>
