@@ -79,7 +79,9 @@ def predict():
         probability = model.predict_proba(df)[0]
         confidence = max(probability) * 100
         
-        result = 'Attack' if prediction == 1 else 'Normal'
+        result = prediction  
+        is_attack = prediction != 'Normal'
+        attack_type = prediction if is_attack else None
         
         # Save to database
         conn = sqlite3.connect('database.db')
@@ -103,7 +105,8 @@ def predict():
         return jsonify({
             'prediction': result,
             'confidence': round(confidence, 2),
-            'is_attack': bool(prediction == 1)
+            'is_attack': is_attack,
+            'attack_type': attack_type
         })
         
     except Exception as e:
