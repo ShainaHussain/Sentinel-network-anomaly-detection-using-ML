@@ -79,14 +79,16 @@ def predict():
                       )
                 df[col] = encoders[col].transform(df[col])
         # Ensure correct column order
-        df = df.reindex(columns=feature_names, fill_value=0)
-
-        # Run model
-        predictions = model.predict(df)
-        probabilities = model.predict_proba(df)
-
-        results = []
-
+        df = df[feature_names]
+        
+        # Predict
+        prediction = model.predict(df)[0]
+        probability = model.predict_proba(df)[0]
+        confidence = max(probability) * 100
+        
+        result = 'Attack' if prediction == 1 else 'Normal'
+        
+        # Save to database
         conn = sqlite3.connect('database.db')
         cursor = conn.cursor()
 
@@ -123,8 +125,9 @@ def predict():
         conn.close()
 
         return jsonify({
-            "total_records": len(results),
-            "results": results
+            'prediction': result,
+            'confidence': round(confidence, 2),
+            'is_attack': bool(prediction == 1)
         })
 
     except Exception as e:
