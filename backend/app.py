@@ -62,53 +62,73 @@ def home():
 def predict():
     try:
         data = request.get_json()
-        
-        # Convert to DataFrame
-        df = pd.DataFrame([data])
-        
+
+        # Allow single OR multiple records
+        if isinstance(data, dict):
+            data = [data]
+
+        df = pd.DataFrame(data)
+
         # Encode categorical columns
+    
         for col in ['protocol_type', 'service', 'flag']:
             if col in df.columns and col in encoders:
+                # Replace unseen values with first known label
+                df[col] = df[col].apply(
+                    lambda x: x if x in encoders[col].classes_ else encoders[col].classes_[0]
+                      )
                 df[col] = encoders[col].transform(df[col])
-        
         # Ensure correct column order
-        df = df[feature_names]
-        
-        # Predict
-        prediction = model.predict(df)[0]
-        probability = model.predict_proba(df)[0]
-        confidence = max(probability) * 100
-        
-        result = 'Attack' if prediction == 1 else 'Normal'
-        
-        # Save to database
+        df = df.reindex(columns=feature_names, fill_value=0)
+
+        # Run model
+        predictions = model.predict(df)
+        probabilities = model.predict_proba(df)
+
+        results = []
+
         conn = sqlite3.connect('database.db')
         cursor = conn.cursor()
-        cursor.execute('''
-            INSERT INTO predictions (timestamp, prediction, confidence, protocol, service, flag, src_bytes, dst_bytes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            result,
-            confidence,
-            data.get('protocol_type', 'unknown'),
-            data.get('service', 'unknown'),
-            data.get('flag', 'unknown'),
-            data.get('src_bytes', 0),
-            data.get('dst_bytes', 0)
-        ))
+
+        for i, pred in enumerate(predictions):
+
+            confidence = max(probabilities[i]) * 100
+            result = 'Attack' if pred == 1 else 'Normal'
+
+            row = data[i]
+
+            # Save each prediction to DB
+            cursor.execute('''
+                INSERT INTO predictions
+                (timestamp, prediction, confidence, protocol, service, flag, src_bytes, dst_bytes)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                result,
+                confidence,
+                row.get('protocol_type', 'unknown'),
+                row.get('service', 'unknown'),
+                row.get('flag', 'unknown'),
+                row.get('src_bytes', 0),
+                row.get('dst_bytes', 0)
+            ))
+
+            results.append({
+                "prediction": result,
+                "confidence": round(confidence, 2),
+                "is_attack": bool(pred == 1)
+            })
+
         conn.commit()
         conn.close()
-        
+
         return jsonify({
-            'prediction': result,
-            'confidence': round(confidence, 2),
-            'is_attack': bool(prediction == 1)
+            "total_records": len(results),
+            "results": results
         })
-        
+
     except Exception as e:
         return jsonify({'error': str(e)}), 400
-
 @app.route('/api/stats', methods=['GET'])
 def get_stats():
     conn = sqlite3.connect('database.db')
